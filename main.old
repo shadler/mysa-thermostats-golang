@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	cognitosrp "github.com/alexrudd/cognito-srp"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"golang.org/x/net/http2"
 
 	aws2 "github.com/aws/aws-sdk-go-v2/aws"
@@ -24,18 +26,19 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
+	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cognitoidentity"
 	"github.com/davecgh/go-spew/spew"
 )
 
+var (
+	username = flag.String("username", "stevenhadler@gmail.com", "Mysa username")
+	password = flag.String("password", "Aa.665.914.324", "Mysa password")
+)
+
 func main() {
-
-
-	// print date and time
-	fmt.Println("start", time.Now())
-
 	flag.Parse()
 
 	var ctx = context.Background()
@@ -44,7 +47,7 @@ func main() {
 
 	svc := cognitoidentity.New(mySession, aws.NewConfig().WithRegion("us-east-1"))
 
-	csrp, _ := cognitosrp.NewCognitoSRP(username, password, "us-east-1_GUFWfhI7g", "19efs8tgqe942atbqmot5m36t3", nil)
+	csrp, _ := cognitosrp.NewCognitoSRP(*username, *password, "us-east-1_GUFWfhI7g", "19efs8tgqe942atbqmot5m36t3", nil)
 
 	cfg, _ := external.LoadDefaultAWSConfig()
 
@@ -54,7 +57,6 @@ func main() {
 
 	cognitoIdentityProvider2 := cip.New(cfg)
 
-	// "USER_SRP_AUTH"
 	initiateAuthRequest := cognitoIdentityProvider2.InitiateAuthRequest(&cip.InitiateAuthInput{
 		AuthFlow:       cip.AuthFlowTypeUserSrpAuth,
 		ClientId:       aws.String(csrp.GetClientId()),
@@ -135,12 +137,21 @@ func main() {
 
 	credentialsForIdentity, err := svc.GetCredentialsForIdentity(credentialsForIdentityInput)
 
+	spew.Dump(credentialsForIdentity)
+
 	mySession.Config.WithCredentials(credentials.NewStaticCredentials(
 		*credentialsForIdentity.Credentials.AccessKeyId,
 		*credentialsForIdentity.Credentials.SecretKey,
 		*credentialsForIdentity.Credentials.SessionToken))
 
 	mySession.Config.WithRegion("us-east-1")
+
+	signer := v4.NewSigner(credentials.NewStaticCredentials(
+		*credentialsForIdentity.Credentials.AccessKeyId,
+		*credentialsForIdentity.Credentials.SecretKey,
+		*credentialsForIdentity.Credentials.SessionToken,
+	))
+	// Expiration
 
 	tr2 := &http2.Transport{
 		TLSClientConfig: &tls.Config{CipherSuites: []uint16{
@@ -153,6 +164,33 @@ func main() {
 			MaxVersion:               tls.VersionTLS11,
 		},
 	}
+
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{CipherSuites: []uint16{
+
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		},
+			MinVersion: tls.VersionTLS12,
+			MaxVersion: tls.VersionTLS12,
+			NextProtos: []string{
+				"http/1.1",
+			},
+			ServerName: "a3q27gia9qg3zy-ats.iot.us-east-1.amazonaws.com",
+		},
+	}
+
+	client := &http.Client{Transport: tr}
 
 	client2 := &http.Client{Transport: tr2}
 
@@ -181,22 +219,42 @@ func main() {
 	var jsonResult map[string]interface{}
 
 	json.NewDecoder(resp10.Body).Decode(&jsonResult)
-	j := jsonResult["devices"].(map[string]interface{})
-	//spew.Dump(j)
+	spew.Dump(jsonResult)
+	
+	return
 
-	fmt.Println("49A")
-	show_j("30aea4ea2ae4", j) // 49A
-	fmt.Println("49B")
-	show_j("30aea4ea2c34", j) //49B
+	body := bytes.NewReader([]byte{})
 
-}
+	endpoint := "a3q27gia9qg3zy-ats.iot.us-east-1.amazonaws.com"
+	originalURL, err := url.Parse(fmt.Sprintf("https://%s/mqtt", endpoint))
 
-func show_j(k string, j map[string]interface{}) {
-	j1 := j[k].(map[string]interface{})
-	j2 := j1["Reading"].(map[string]interface{})
-	for key, value := range j2 {
-		fmt.Println("---  ", key, "  :", value)
+	key, _ := generateChallengeKey()
+
+	req22 := &http.Request{
+		Method: "GET",
+		URL:    originalURL,
+		Header: map[string][]string{},
 	}
+
+	req22.Host = "a3q27gia9qg3zy-ats.iot.us-east-1.amazonaws.com"
+	_, err = signer.Presign(
+		req22, body,
+		"iotdevicegateway", "us-east-1",
+		time.Hour*24, time.Now(),
+	)
+
+	req22.Header.Set("Sec-WebSocket-Protocol", "mqtt")
+	req22.Header.Set("Upgrade", "websocket")
+	req22.Header.Set("Connection", "Upgrade")
+	req22.Header.Set("Sec-WebSocket-Version", "13")
+	req22.Header.Set("Sec-WebSocket-Key", key)
+	req22.Header.Set("accept-encoding", "gzip")
+	req22.Header.Set("user-agent", "okhttp/3.12.1")
+	req22.Header.Set("origin", "https://a3q27gia9qg3zy-ats.iot.us-east-1.amazonaws.com")
+
+	resp, err2 := client.Do(req22)
+	spew.Dump(resp)
+
 }
 
 func generateChallengeKey() (string, error) {
@@ -207,6 +265,8 @@ func generateChallengeKey() (string, error) {
 	return base64.StdEncoding.EncodeToString(p), nil
 }
 
-func nope() {
-	spew.Dump("49A")
+func messageHandler(client mqtt.Client, msg mqtt.Message) {
+	fmt.Printf("Message received\n")
+	fmt.Printf("  topic: %s\n", msg.Topic())
+	fmt.Printf("  payload: %s\n", msg.Payload())
 }
