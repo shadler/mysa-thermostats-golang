@@ -33,6 +33,7 @@ import (
 func main() {
 
 
+
 	// print date and time
 	fmt.Println("start", time.Now())
 
@@ -184,18 +185,28 @@ func main() {
 	j := jsonResult["devices"].(map[string]interface{})
 	//spew.Dump(j)
 
-	fmt.Println("49A")
-	show_j("30aea4ea2ae4", j) // 49A
-	fmt.Println("49B")
-	show_j("30aea4ea2c34", j) //49B
+	// foreach device
+	for key, _ := range j {
+		fmt.Println("rec  ", key)
+		show_j(key, j)
+	}
 
+	fmt.Println("end ", time.Now())
 }
 
 func show_j(k string, j map[string]interface{}) {
 	j1 := j[k].(map[string]interface{})
 	j2 := j1["Reading"].(map[string]interface{})
-	for key, value := range j2 {
-		fmt.Println("---  ", key, "  :", value)
+	for k, v := range j2 {
+		var vv string
+		switch v.(type) {
+		case float64, float32:
+			vv = fmt.Sprintf("%f", v)
+		default:
+			vv = fmt.Sprintf("%v", v)
+		}
+
+		fmt.Println("---  ", k, "  :", vv)
 	}
 }
 
