@@ -6,7 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
-	"flag"
+//	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -20,24 +20,27 @@ import (
 
 	aws2 "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
+
 	cip "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
-
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cognitoidentity"
-	"github.com/davecgh/go-spew/spew"
+	//"github.com/davecgh/go-spew/spew"
 )
 
+
+//	spew.Dump("49A")
+//  flag.Parse()
+
 func main() {
+	username  := ""
+	password  := ""
+	client_id := "19efs8tgqe942atbqmot5m36t3"
+	pool_id   := "us-east-1_GUFWfhI7g"
 
-
-
-	// print date and time
 	fmt.Println("start", time.Now())
-
-	flag.Parse()
 
 	var ctx = context.Background()
 
@@ -45,7 +48,7 @@ func main() {
 
 	svc := cognitoidentity.New(mySession, aws.NewConfig().WithRegion("us-east-1"))
 
-	csrp, _ := cognitosrp.NewCognitoSRP(username, password, "us-east-1_GUFWfhI7g", "19efs8tgqe942atbqmot5m36t3", nil)
+	csrp, _ := cognitosrp.NewCognitoSRP(username, password, pool_id , client_id , nil)
 
 	cfg, _ := external.LoadDefaultAWSConfig()
 
@@ -55,9 +58,9 @@ func main() {
 
 	cognitoIdentityProvider2 := cip.New(cfg)
 
-	// "USER_SRP_AUTH"
+
 	initiateAuthRequest := cognitoIdentityProvider2.InitiateAuthRequest(&cip.InitiateAuthInput{
-		AuthFlow:       cip.AuthFlowTypeUserSrpAuth,
+		AuthFlow:       cip.AuthFlowTypeUserSrpAuth,  	// "USER_SRP_AUTH"
 		ClientId:       aws.String(csrp.GetClientId()),
 		AuthParameters: csrp.GetAuthParams(),
 	})
@@ -106,7 +109,9 @@ func main() {
 		fmt.Println(err.Error())
 		return
 	}
-	IdToken = *initiateAutheRespond.AuthenticationResult.IdToken
+
+	
+	IdToken = *initiateAutheRespond.AuthenticationResult.IdToken   // =====   IdToken
 
 	if err != nil {
 		fmt.Println(err.Error())
@@ -183,9 +188,7 @@ func main() {
 
 	json.NewDecoder(resp10.Body).Decode(&jsonResult)
 	j := jsonResult["devices"].(map[string]interface{})
-	//spew.Dump(j)
 
-	// foreach device
 	for key, _ := range j {
 		fmt.Println("rec  ", key)
 		show_j(key, j)
@@ -218,6 +221,4 @@ func generateChallengeKey() (string, error) {
 	return base64.StdEncoding.EncodeToString(p), nil
 }
 
-func nope() {
-	spew.Dump("49A")
-}
+
